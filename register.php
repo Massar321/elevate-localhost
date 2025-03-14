@@ -15,32 +15,20 @@ $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
 $password = $_POST['password'] ?? '';
 $password_confirm = $_POST['password_confirm'] ?? '';
 
-// Vérification des champs obligatoires
 if (empty($type) || empty($email) || empty($password) || empty($password_confirm)) {
-    header("Location: index.php?register_error=Veuillez remplir tous les champs obligatoires");
+    header("Location: index.php?register_error=Veuillez remplir tous les champs");
     exit;
 }
 
-// Vérification des mots de passe
 if ($password !== $password_confirm) {
     header("Location: index.php?register_error=Les mots de passe ne correspondent pas");
     exit;
 }
 
 // Vérifier si l'email existe déjà
-$checkEmail = $pdo->prepare("
-    SELECT COUNT(*) FROM juniors WHERE email = ? 
-    UNION 
-    SELECT COUNT(*) FROM companies WHERE email = ? 
-    UNION 
-    SELECT COUNT(*) FROM admins WHERE email = ? 
-    UNION 
-    SELECT COUNT(*) FROM mentors WHERE email = ?
-");
+$checkEmail = $pdo->prepare("SELECT COUNT(*) FROM juniors WHERE email = ? UNION SELECT COUNT(*) FROM companies WHERE email = ? UNION SELECT COUNT(*) FROM admins WHERE email = ? UNION SELECT COUNT(*) FROM mentors WHERE email = ?");
 $checkEmail->execute([$email, $email, $email, $email]);
-$emailExists = $checkEmail->fetchColumn();
-
-if ($emailExists > 0) {
+if ($checkEmail->fetchColumn() > 0) {
     header("Location: index.php?register_error=Cet email est déjà utilisé");
     exit;
 }
@@ -49,16 +37,14 @@ $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
 try {
     if ($type === 'junior') {
-        $stmt = $pdo->prepare("
-            INSERT INTO juniors (email, password, firstname, lastname, birthdate, school, status, country, city, experience) 
-            VALUES (:email, :password, :firstname, :lastname, :birthdate, :school, :status, :country, :city, :experience)
-        ");
+        $stmt = $pdo->prepare("INSERT INTO juniors (email, password, firstname, lastname, birthdate, school, status, country, city, experience) 
+            VALUES (:email, :password, :firstname, :lastname, :birthdate, :school, :status, :country, :city, :experience)");
         $stmt->execute([
             'email' => $email,
             'password' => $hashed_password,
             'firstname' => $_POST['firstname'] ?? '',
             'lastname' => $_POST['lastname'] ?? '',
-            'birthdate' => $_POST['birthdate'] ?? null,
+            'birthdate' => $_POST['birthdate'] ?? '',
             'school' => $_POST['school'] ?? '',
             'status' => $_POST['status'] ?? '',
             'country' => $_POST['country'] ?? '',
@@ -66,10 +52,8 @@ try {
             'experience' => (int)($_POST['experience'] ?? 0)
         ]);
     } elseif ($type === 'company') {
-        $stmt = $pdo->prepare("
-            INSERT INTO companies (email, password, name, city, country, siret, company_type, domain) 
-            VALUES (:email, :password, :name, :city, :country, :siret, :company_type, :domain)
-        ");
+        $stmt = $pdo->prepare("INSERT INTO companies (email, password, name, city, country, siret, company_type, domain) 
+            VALUES (:email, :password, :name, :city, :country, :siret, :company_type, :domain)");
         $stmt->execute([
             'email' => $email,
             'password' => $hashed_password,
@@ -81,10 +65,8 @@ try {
             'domain' => $_POST['domain'] ?? ''
         ]);
     } elseif ($type === 'mentor') {
-        $stmt = $pdo->prepare("
-            INSERT INTO mentors (firstname, lastname, email, password, years_experience, activity_domain, company, employment_status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ");
+        $stmt = $pdo->prepare("INSERT INTO mentors (firstname, lastname, email, password, years_experience, activity_domain, company, employment_status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
             $_POST['firstname'] ?? '',
             $_POST['lastname'] ?? '',
@@ -100,22 +82,13 @@ try {
         exit;
     }
 
-    // Stocker les informations dans la session et rediriger
     $_SESSION['email'] = $email;
     $_SESSION['type'] = $type;
     $_SESSION['user_id'] = $pdo->lastInsertId();
-
-    // Rediriger vers le tableau de bord approprié
-    if ($type === 'junior') {
-        header("Location: junior_dashboard.php");
-    } elseif ($type === 'company') {
-        header("Location: company_dashboard.php");
-    } elseif ($type === 'mentor') {
-        header("Location: mentor_dashboard.php");
-    }
+    header("Location: index.php");
     exit;
 } catch (PDOException $e) {
-    header("Location: index.php?register_error=Erreur lors de la création : " . htmlspecialchars($e->getMessage()));
+    header("Location: index.php?register_error=Erreur lors de la création : " . $e->getMessage());
     exit;
 }
 ?>

@@ -21,7 +21,6 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elevate Junior - Bienvenue</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -36,14 +35,14 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            align-items: flex-start; /* Changé de center à flex-start pour permettre le scroll */
-            padding: 20px 0; /* Ajouté pour un espace en haut et bas */
+            align-items: center;
+            overflow: hidden;
         }
 
         .container {
             max-width: 600px;
             width: 90%;
-            padding: 20px;
+            padding: 30px;
             position: relative;
             z-index: 1;
         }
@@ -51,12 +50,11 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
         .card {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 15px;
-            padding: 25px;
+            padding: 30px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             transition: transform 0.3s ease, opacity 0.3s ease;
             opacity: 0;
             transform: translateY(20px);
-            margin-bottom: 20px; /* Ajouté pour éviter que les cartes se chevauchent */
         }
 
         .card.active {
@@ -68,14 +66,14 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
             text-align: center;
             color: #2c3e50;
             font-size: 2rem;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             font-weight: 600;
         }
 
         input, select {
             width: 100%;
-            padding: 10px 12px;
-            margin: 8px 0;
+            padding: 12px 15px;
+            margin: 10px 0;
             border: none;
             border-radius: 8px;
             background: #f1f3f5;
@@ -141,19 +139,12 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
         }
 
         .form-section {
-            margin-bottom: 12px;
-        }
-
-        /* Conteneur pour champs spécifiques avec scroll si nécessaire */
-        #junior-fields, #company-fields, #mentor-fields {
-            max-height: 50vh; /* Limite la hauteur sur petits écrans */
-            overflow-y: auto; /* Ajoute un scroll vertical si besoin */
-            padding-right: 5px; /* Pour éviter que le contenu touche le bord */
+            margin-bottom: 15px;
         }
 
         /* Animation de fond */
         .bg-animation {
-            position: fixed; /* Changé de absolute à fixed pour couvrir tout l’écran */
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
@@ -170,61 +161,13 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
         }
 
         /* Media Queries pour responsivité */
-        @media (max-width: 768px) {
-            .container {
-                width: 95%;
-                padding: 15px;
-            }
-            h2 {
-                font-size: 1.8rem;
-            }
-            .btn {
-                font-size: 1rem;
-                padding: 10px;
-            }
-            input, select {
-                padding: 8px 10px;
-                font-size: 0.9rem;
-            }
-            .card {
-                padding: 20px;
-            }
-        }
-
         @media (max-width: 480px) {
-            body {
-                padding: 10px 0; /* Réduit l’espace sur mobile */
-            }
-            .container {
-                width: 100%;
-                padding: 10px;
-            }
-            h2 {
-                font-size: 1.5rem;
-            }
-            .btn {
-                font-size: 0.9rem;
-                padding: 8px;
-            }
-            input, select {
-                padding: 6px 8px;
-                font-size: 0.85rem;
-            }
-            .card {
-                padding: 15px;
-                border-radius: 10px;
-            }
-            .form-section {
-                margin-bottom: 10px;
-            }
-            .toggle-link {
-                font-size: 0.8rem;
-            }
-            #junior-fields, #company-fields, #mentor-fields {
-                max-height: 40vh; /* Réduit encore la hauteur sur petits écrans */
-            }
+            .container { padding: 20px; }
+            h2 { font-size: 1.5rem; }
+            .btn { font-size: 1rem; }
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="bg-animation"></div>
@@ -255,7 +198,9 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
                 <button type="submit" class="btn">Se connecter</button>
             </form>
             <a href="#" class="toggle-link" onclick="showPage('register-page')">Pas de compte ? Créer un compte</a>
-            <a href="#" class="toggle-link" onclick="showPage('welcome-page')">Retour</a>
+            < #
+
+a href="#" class="toggle-link" onclick="showPage('welcome-page')">Retour</a>
         </div>
 
         <!-- Formulaire d'inscription -->
@@ -280,10 +225,10 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
                 </div>
                 <!-- Champs Junior -->
                 <div id="junior-fields" style="display: none;">
-                    <input type="text" name="firstname" placeholder="Prénom" required>
-                    <input type="text" name="lastname" placeholder="Nom" required>
-                    <input type="date" name="birthdate" placeholder="Date de naissance" required>
-                    <input type="text" name="school" placeholder="Établissement (si étudiant)" required>
+                    <input type="text" name="firstname" placeholder="Prénom">
+                    <input type="text" name="lastname" placeholder="Nom">
+                    <input type="date" name="birthdate" placeholder="Date de naissance">
+                    <input type="text" name="school" placeholder="Établissement (si étudiant)">
                     <select name="status">
                         <option value="">Statut</option>
                         <option value="student">Étudiant</option>
@@ -337,7 +282,7 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
             });
             const targetCard = document.getElementById(pageId);
             targetCard.style.display = 'block';
-            setTimeout(() => targetCard.classList.add('active'), 10);
+            setTimeout(() => targetCard.classList.add('active'), 10); // Pour l'animation
         }
 
         function updateRegisterForm() {
@@ -346,11 +291,13 @@ if (isset($_SESSION['email']) && isset($_SESSION['type'])) {
             document.getElementById('company-fields').style.display = type === 'company' ? 'block' : 'none';
             document.getElementById('mentor-fields').style.display = type === 'mentor' ? 'block' : 'none';
 
+            // Gérer les champs requis dynamiquement
             document.querySelectorAll('#junior-fields input, #junior-fields select').forEach(field => field.required = type === 'junior');
             document.querySelectorAll('#company-fields input, #company-fields select').forEach(field => field.required = type === 'company');
             document.querySelectorAll('#mentor-fields input, #mentor-fields select').forEach(field => field.required = type === 'mentor');
         }
 
+        // Afficher la page de bienvenue par défaut avec animation
         showPage('welcome-page');
     </script>
 </body>

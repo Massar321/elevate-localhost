@@ -13,14 +13,15 @@ $stmt->execute([$_SESSION['email']]);
 $junior = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$junior) {
+    // Si aucun utilisateur n'est trouvé, détruire la session et rediriger
     session_destroy();
     header("Location: index.php");
     exit;
 }
 
 $juniorId = $junior['id'] ?? 0;
-$juniorFirstname = htmlspecialchars($junior['firstname'] ?? 'Utilisateur');
-$juniorLastname = htmlspecialchars($junior['lastname'] ?? '');
+$juniorFirstname = $junior['firstname'] ?? 'Utilisateur';
+$juniorLastname = $junior['lastname'] ?? '';
 $profilePicture = $junior['profile_picture'] ?? 'uploads/default_profile.jpg';
 
 // Traitement de l'upload de la photo de profil
@@ -46,7 +47,7 @@ $registeredStmt = $pdo->prepare("SELECT DISTINCT project_id FROM ppe_registratio
 $registeredStmt->execute([$juniorId]);
 $registeredProjects = $registeredStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
-// Récupérer les domaines inscrits
+// Récupérer les domaines inscrits (facultatif, pour compatibilité)
 $registeredDomainsStmt = $pdo->prepare("SELECT domain FROM ppe_registrations WHERE junior_id = ?");
 $registeredDomainsStmt->execute([$juniorId]);
 $registeredDomains = $registeredDomainsStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
@@ -109,7 +110,7 @@ if ($section === 'my_projects') {
     }
 }
 
-// Statistiques pour un nouvel utilisateur (initialisées à 0 si pas de données)
+// Statistiques pour la section stats
 if (!empty($registeredProjects)) {
     $placeholders = implode(',', array_fill(0, count($registeredProjects), '?'));
     $statsStmt = $pdo->prepare("SELECT COUNT(*) FROM ppe_projects WHERE id IN ($placeholders)");
@@ -122,9 +123,9 @@ if (!empty($registeredProjects)) {
 $stats = [
     'ppe_registered' => $ppeRegisteredCount,
     'projects_accepted' => $pdo->query("SELECT COUNT(*) FROM applications WHERE junior_id = $juniorId AND status = 'accepted'")->fetchColumn() ?: 0,
-    'trainings' => $pdo->query("SELECT COUNT(*) FROM trainings WHERE EXISTS (SELECT 1 FROM certifications WHERE training_id = trainings.id AND junior_id = $juniorId)")->fetchColumn() ?: 0,
+    'trainings' => $pdo->query("SELECT COUNT(*) FROM trainings")->fetchColumn() ?: 0,
     'certifications' => $pdo->query("SELECT COUNT(*) FROM certifications WHERE junior_id = $juniorId")->fetchColumn() ?: 0,
-    'opensource' => $pdo->query("SELECT COUNT(*) FROM opensource_projects WHERE EXISTS (SELECT 1 FROM applications WHERE project_id = opensource_projects.id AND junior_id = $juniorId AND status = 'accepted')")->fetchColumn() ?: 0
+    'opensource' => $pdo->query("SELECT COUNT(*) FROM opensource_projects")->fetchColumn() ?: 0
 ];
 
 // Récupérer les encadrants pour assignation
@@ -388,8 +389,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Contenu principal -->
     <div class="main-content <?php echo htmlspecialchars($section); ?>">
         <div class="container">
-            <h1>Bienvenue, <?php echo htmlspecialchars($junior['firstname'] . ' ' . $junior['lastname']); ?></h1>
-            
+            <h1>Bienvenue, <?php echo htmlspecialchars($juniorFirstname . ' ' . $juniorLastname); ?></h1>
 
             <!-- Statistiques (toujours visible) -->
             <div class="card">
@@ -405,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="stat-item">
                         <h3><?php echo $stats['trainings']; ?></h3>
-                        <p>Formations suivies</p>
+                        <p>Formations</p>
                     </div>
                     <div class="stat-item">
                         <h3><?php echo $stats['certifications']; ?></h3>
@@ -472,6 +472,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php if (in_array($domain, $registeredDomains)): ?>
                                     <p class="registered">Inscrit</p>
                                 <?php endif; ?>
+                                <form method="POST">
+                                    <input type="hidden" name="domain" value="<?php echo $domain; ?>">
+                                    <button type="submit" name="register_ppe" class="btn" <?php echo in_array($domain, $registeredDomains) ? 'disabled' : ''; ?>>S'inscrire</button>
+                                </form>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -553,6 +557,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php endif; ?>
                                 <div class="grid">
                                     <div class="item <?php echo strtolower(str_replace(' ', '-', $project['domain_name'])); ?>">
+                                        <?php
+                                        // Pas de badge "Nouveau" car le projet est inscrit
+                                        ?>
                                         <h3><?php echo htmlspecialchars($project['title']); ?></h3>
                                         <p><?php echo htmlspecialchars($project['description']); ?></p>
                                         <?php if ($project['project_file']): ?>

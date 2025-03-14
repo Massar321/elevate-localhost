@@ -2,6 +2,14 @@
 session_start();
 require_once 'db_connect.php';
 
+// Charger PHPMailer
+require_once 'PHPMailer/PHPMailer.php';
+require_once 'PHPMailer/SMTP.php';
+require_once 'PHPMailer/Exception.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 if (!isset($_SESSION['email']) || $_SESSION['type'] !== 'company') {
     header("Location: index.php");
     exit;
@@ -36,7 +44,7 @@ if ($section === 'applications' || $section === 'stats') {
     $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 
-// Statistiques
+// Statistiques (toujours récupérées)
 $stats = [
     'projects' => $pdo->query("SELECT COUNT(*) FROM projects WHERE company_id = $companyId")->fetchColumn() ?: 0,
     'applications' => $pdo->query("SELECT COUNT(*) FROM applications a JOIN projects p ON a.project_id = p.id WHERE p.company_id = $companyId")->fetchColumn() ?: 0,
@@ -73,11 +81,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $applicationId = intval($_POST['application_id']);
         $status = $_POST['action'] === 'accept' ? 'accepted' : 'rejected';
 
-        // Mettre à jour le statut sans envoi d'email
+        // Mettre à jour le statut
         $stmt = $pdo->prepare("UPDATE applications SET status = ? WHERE id = ? AND project_id IN (SELECT id FROM projects WHERE company_id = ?)");
         $stmt->execute([$status, $applicationId, $companyId]);
+
+        // Récupérer les infos pour l'email
+        $stmt = $pdo->prepare("
+            SELECT j.email, j.firstname, p.title 
+            FROM applications a 
+            JOIN juniors j ON a.junior_id = j.id 
+            JOIN projects p ON a.project_id = p.id 
+            WHERE a.id = ?
+        ");
+        $stmt->execute([$applicationId]);
+        $application = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // Configurer PHPMailer
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'ton.email@gmail.com'; // Remplace par ton email Gmail
+            $mail->Password = 'ton_mot_de_passe_application'; // Remplace par ton mot de passe d'application
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+
+            $mail->setFrom('ton.email@gmail.com', 'ConnectSphere');
+            $mail->addAddress($application['email']);
+            $mail->Subject = "Statut de votre candidature pour " . $application['title'];
+            $mail->Body = "Bonjour " . $application['firstname'] . ",\n\nVotre candidature pour le projet '" . $application['title'] . "' a été " . ($status === 'accepted' ? 'acceptée' : 'rejetée') . ".\nCordialement,\nL'équipe ConnectSphere";
+            $mail->send();
+        } catch (Exception $e) {
+            error_log("Erreur PHPMailer : " . $mail->ErrorInfo);
+        }
     }
-    header("Location: company_dashboard.php?section=" . ($section === 'projects' ? 'projects' : 'applications'));
+    header("Location: company_dashboard.php?section=applications");
     exit;
 }
 ?>
@@ -88,20 +127,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tableau de bord Entreprise - ConnectSphere</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
+            font-family: Arial, sans-serif;
         }
 
         body {
-            background: linear-gradient(135deg, #f5f6fa 0%, #e9ecef 100%);
+            background-color: #f5f6fa;
             color: #333;
             line-height: 1.6;
-            overflow-x: hidden;
         }
 
         .sidebar {
@@ -110,34 +147,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             left: 0;
             top: 0;
             height: 100%;
-            background: linear-gradient(180deg, #2c3e50 0%, #1a2633 100%);
+            background: #2c3e50;
             color: white;
-            padding: 30px 20px;
-            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
+            padding: 20px;
         }
 
         .sidebar h2 {
-            font-size: 1.5rem;
-            margin-bottom: 30px;
-            text-align: center;
-            color: #ecf0f1;
+            margin-bottom: 20px;
         }
 
         .sidebar a {
-            color: #ecf0f1;
+            color: white;
             text-decoration: none;
             display: block;
-            padding: 12px 15px;
-            margin: 8px 0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: background 0.3s ease, transform 0.2s ease;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
         }
 
         .sidebar a:hover, .sidebar a.active {
             background: #34495e;
-            transform: translateX(5px);
         }
 
         .sidebar .new-notif {
@@ -147,11 +176,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         .sidebar .new-notif::after {
             content: '<?php echo $stats['pending_applications']; ?>';
             position: absolute;
-            top: 8px;
-            right: 10px;
+            top: 5px;
+            right: 5px;
             background: #e74c3c;
             color: white;
-            padding: 4px 8px;
+            padding: 2px 6px;
             border-radius: 50%;
             font-size: 0.8rem;
             display: <?php echo $stats['pending_applications'] > 0 ? 'block' : 'none'; ?>;
@@ -159,8 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         .main-content {
             margin-left: 250px;
-            padding: 40px 20px;
-            min-height: 100vh;
+            padding: 20px;
         }
 
         .container {
@@ -170,16 +198,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         .card {
             background: white;
-            border-radius: 12px;
-            padding: 25px;
+            border-radius: 8px;
+            padding: 20px;
             margin: 20px 0;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
         .grid {
@@ -190,145 +212,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
         .item {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s ease;
-        }
-
-        .item:hover {
-            transform: scale(1.02);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         .item.pending {
             background: #fff3cd;
-            border: 2px solid #f39c12;
+            border: 1px solid #f39c12;
         }
 
         .btn {
             padding: 10px 20px;
-            background: linear-gradient(90deg, #3498db, #2980b9);
+            background: #3498db;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 1rem;
-            transition: background 0.3s ease, transform 0.2s ease;
+            margin: 5px;
         }
 
         .btn:hover {
-            background: linear-gradient(90deg, #2980b9, #1e6a9e);
-            transform: translateY(-2px);
+            background: #2980b9;
         }
 
         .btn-danger {
-            background: linear-gradient(90deg, #e74c3c, #c0392b);
+            background: #e74c3c;
         }
 
         .btn-danger:hover {
-            background: linear-gradient(90deg, #c0392b, #992d22);
+            background: #c0392b;
         }
 
         .btn-success {
-            background: linear-gradient(90deg, #27ae60, #219653);
+            background: #27ae60;
         }
 
         .btn-success:hover {
-            background: linear-gradient(90deg, #219653, #1b7743);
+            background: #219653;
         }
 
         h1, h2 {
             color: #2c3e50;
-            margin-bottom: 20px;
-            font-weight: 600;
+            margin-bottom: 15px;
         }
 
-        form {
-            margin: 20px 0;
-        }
-
-        input, textarea, select {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: none;
-            border-radius: 8px;
-            background: #f1f3f5;
-            font-size: 1rem;
-            transition: box-shadow 0.3s ease;
-        }
-
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
-        }
-
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .stats-grid {
-            display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-            margin: 20px 0;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 15px;
-            min-width: 120px;
-            background: #ecf0f1;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
-        }
-
-        .stat-item:hover {
-            transform: scale(1.05);
-        }
-
-        .stat-item h3 {
-            font-size: 1.8rem;
-            color: #3498db;
-            margin-bottom: 5px;
-        }
-
-        .stat-item p {
-            font-size: 0.9rem;
-            color: #7f8c8d;
-        }
-
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 200px;
-            }
-            .main-content {
-                margin-left: 200px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: relative;
-            }
-            .main-content {
-                margin-left: 0;
-                padding: 20px;
-            }
-            .stats-grid {
-                flex-direction: column;
-                align-items: center;
-            }
-        }
+        form { margin: 20px 0; }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
+        .stats-grid { display: flex; justify-content: space-around; flex-wrap: wrap; margin: 20px 0; }
+        .stat-item { text-align: center; padding: 10px; min-width: 100px; }
+        .stat-item h3 { font-size: 1.5rem; color: #3498db; }
     </style>
 </head>
 <body>
     <!-- Barre latérale -->
     <div class="sidebar">
-        <h2>Elevate Junior</h2>
+        <h2>ConnectSphere</h2>
         <a href="?section=stats" class="<?php echo $section === 'stats' ? 'active' : ''; ?>">Statistiques</a>
         <a href="?section=projects" class="<?php echo $section === 'projects' ? 'active' : ''; ?>">Projets</a>
         <a href="?section=applications" class="<?php echo $section === 'applications' ? 'active' : ''; ?> new-notif">Candidatures</a>
@@ -340,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         <div class="container">
             <h1>Bienvenue, <?php echo htmlspecialchars($companyName); ?></h1>
 
-            <!-- Statistiques -->
+            <!-- Statistiques (toujours visible) -->
             <div class="card">
                 <h2>Statistiques</h2>
                 <div class="stats-grid">
@@ -354,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     </div>
                     <div class="stat-item">
                         <h3><?php echo $stats['pending_applications']; ?></h3>
-                        <p>En attente</p>
+                        <p>Candidatures en attente</p>
                     </div>
                 </div>
             </div>

@@ -64,11 +64,20 @@ foreach ($domains as $domain) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'delete_junior') {
         $juniorId = intval($_POST['junior_id']);
+        $tables = ['applications', 'certifications', 'ppe_registrations'];
+        foreach ($tables as $table) {
+            $stmt = $pdo->prepare("DELETE FROM $table WHERE junior_id = ?");
+            $stmt->execute([$juniorId]);
+        }
         $stmt = $pdo->prepare("DELETE FROM juniors WHERE id = ?");
         $stmt->execute([$juniorId]);
         header("Location: admin_dashboard.php?section=juniors");
     } elseif ($_POST['action'] === 'delete_company') {
         $companyId = intval($_POST['company_id']);
+        $stmt = $pdo->prepare("DELETE a FROM applications a JOIN projects p ON a.project_id = p.id WHERE p.company_id = ?");
+        $stmt->execute([$companyId]);
+        $stmt = $pdo->prepare("DELETE FROM projects WHERE company_id = ?");
+        $stmt->execute([$companyId]);
         $stmt = $pdo->prepare("DELETE FROM companies WHERE id = ?");
         $stmt->execute([$companyId]);
         header("Location: admin_dashboard.php?section=companies");
@@ -87,16 +96,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $domainId = intval($_POST['domain_id']);
         $title = $_POST['title'];
         $description = $_POST['description'];
-
         $filePath = null;
         if (isset($_FILES['project_file']) && $_FILES['project_file']['error'] === UPLOAD_ERR_OK) {
             $fileName = time() . '_' . basename($_FILES['project_file']['name']);
             $filePath = 'uploads/' . $fileName;
             move_uploaded_file($_FILES['project_file']['tmp_name'], $filePath);
         }
-
         $stmt = $pdo->prepare("INSERT INTO ppe_projects (domain_id, title, description, project_file) VALUES (?, ?, ?, ?)");
         $stmt->execute([$domainId, $title, $description, $filePath]);
+        header("Location: admin_dashboard.php?section=ppe");
+    } elseif ($_POST['action'] === 'delete_ppe_project') {
+        $projectId = intval($_POST['project_id']);
+        
+        // Supprimer les inscriptions associées dans ppe_registrations
+        $stmt = $pdo->prepare("DELETE FROM ppe_registrations WHERE project_id = ?");
+        $stmt->execute([$projectId]);
+        
+        // Supprimer le fichier associé s'il existe
+        $stmt = $pdo->prepare("SELECT project_file FROM ppe_projects WHERE id = ?");
+        $stmt->execute([$projectId]);
+        $filePath = $stmt->fetchColumn();
+        if ($filePath && file_exists($filePath)) {
+            unlink($filePath);
+        }
+        
+        // Supprimer le projet
+        $stmt = $pdo->prepare("DELETE FROM ppe_projects WHERE id = ?");
+        $stmt->execute([$projectId]);
+        header("Location: admin_dashboard.php?section=ppe");
+    } elseif ($_POST['action'] === 'update_ppe_project') {
+        $projectId = intval($_POST['project_id']);
+        $domainId = intval($_POST['domain_id']);
+        $title = $_POST['title'];
+        $description = $_POST['description'];
+
+        // Gestion du fichier : conserver l'ancien sauf si un nouveau est uploadé
+        $stmt = $pdo->prepare("SELECT project_file FROM ppe_projects WHERE id = ?");
+        $stmt->execute([$projectId]);
+        $oldFilePath = $stmt->fetchColumn();
+
+        $filePath = $oldFilePath;
+        if (isset($_FILES['project_file']) && $_FILES['project_file']['error'] === UPLOAD_ERR_OK) {
+            // Supprimer l'ancien fichier s'il existe
+            if ($oldFilePath && file_exists($oldFilePath)) {
+                unlink($oldFilePath);
+            }
+            $fileName = time() . '_' . basename($_FILES['project_file']['name']);
+            $filePath = 'uploads/' . $fileName;
+            move_uploaded_file($_FILES['project_file']['tmp_name'], $filePath);
+        }
+
+        $stmt = $pdo->prepare("UPDATE ppe_projects SET domain_id = ?, title = ?, description = ?, project_file = ? WHERE id = ?");
+        $stmt->execute([$domainId, $title, $description, $filePath, $projectId]);
         header("Location: admin_dashboard.php?section=ppe");
     }
     exit;
@@ -217,6 +268,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             background: #c0392b;
         }
 
+        .btn-edit {
+            background: #f39c12;
+        }
+
+        .btn-edit:hover {
+            background: #e67e22;
+        }
+
         h1, h2 {
             color: #2c3e50;
             margin-bottom: 15px;
@@ -298,7 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="action" value="delete_junior">
                                         <input type="hidden" name="junior_id" value="<?php echo $junior['id']; ?>">
-                                        <button type="submit" class="btn btn-danger" onclick="return confirm('Supprimer ce profil Junior ?');">Supprimer</button>
+                                        <button type="submit" class="btn btn-danger" onclick="return confirm('Supprimer ce profil Junior ? Cela supprimera aussi ses candidatures, certifications et inscriptions PPE.');">Supprimer</button>
                                     </form>
                                 </div>
                             <?php endforeach; ?>
@@ -321,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                     <form method="POST" style="display: inline;">
                                         <input type="hidden" name="action" value="delete_company">
                                         <input type="hidden" name="company_id" value="<?php echo $company['id']; ?>">
-                                        <button type="submit" class="btn btn-danger" onclick="return confirm('Supprimer cette entreprise ?');">Supprimer</button>
+                                        <button type="submit" class="btn btn-danger" onclick="return confirm('Supprimer cette entreprise ? Cela supprimera aussi ses projets et candidatures associées.');">Supprimer</button>
                                     </form>
                                 </div>
                             <?php endforeach; ?>
@@ -345,6 +404,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         <input type="file" name="project_file" accept=".pdf,.doc,.docx">
                         <button type="submit" class="btn">Créer</button>
                     </form>
+
                     <?php if (empty($ppeDomains)): ?>
                         <p>Aucun domaine PPE défini pour le moment.</p>
                     <?php else: ?>
@@ -366,6 +426,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                                 <?php if ($project['project_file']): ?>
                                                     <p><strong>Fichier :</strong> <a href="<?php echo htmlspecialchars($project['project_file']); ?>" download>Télécharger</a></p>
                                                 <?php endif; ?>
+                                                <!-- Bouton Modifier -->
+                                                <button class="btn btn-edit" onclick="document.getElementById('edit-form-<?php echo $project['id']; ?>').style.display='block';">Modifier</button>
+                                                <!-- Bouton Supprimer -->
+                                                <form method="POST" style="display: inline;">
+                                                    <input type="hidden" name="action" value="delete_ppe_project">
+                                                    <input type="hidden" name="project_id" value="<?php echo $project['id']; ?>">
+                                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Supprimer ce projet PPE ? Cela supprimera aussi les inscriptions associées.');">Supprimer</button>
+                                                </form>
+                                                <!-- Formulaire de modification (caché par défaut) -->
+                                                <form id="edit-form-<?php echo $project['id']; ?>" method="POST" enctype="multipart/form-data" style="display: none; margin-top: 10px;">
+                                                    <h4>Modifier le projet</h4>
+                                                    <input type="hidden" name="action" value="update_ppe_project">
+                                                    <input type="hidden" name="project_id" value="<?php echo $project['id']; ?>">
+                                                    <select name="domain_id" required>
+                                                        <option value="">Choisir un domaine</option>
+                                                        <?php foreach ($ppeDomains as $d): ?>
+                                                            <option value="<?php echo $d['id']; ?>" <?php echo $d['id'] == $project['domain_id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($d['name']); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <input type="text" name="title" value="<?php echo htmlspecialchars($project['title']); ?>" required>
+                                                    <textarea name="description" required><?php echo htmlspecialchars($project['description']); ?></textarea>
+                                                    <input type="file" name="project_file" accept=".pdf,.doc,.docx">
+                                                    <button type="submit" class="btn">Enregistrer</button>
+                                                    <button type="button" class="btn btn-danger" onclick="document.getElementById('edit-form-<?php echo $project['id']; ?>').style.display='none';">Annuler</button>
+                                                </form>
                                             </div>
                                         <?php endforeach; ?>
                                     <?php endif; ?>
